@@ -7,10 +7,10 @@ terraform {
   }
 }
 provider "proxmox" {
-  endpoint = "https://192.168.56.101:8006/"
-  username = "root@pam"
-  password = "Yassine"
-  insecure = true
+  endpoint = var.proxmox_endpoint
+  username = var.proxmox_username
+  password = var.proxmox_password
+  insecure = var.proxmox_insecure
 }
 resource "proxmox_virtual_environment_container" "debian_container" {
   description = "Managed by Terraform"
@@ -32,7 +32,7 @@ resource "proxmox_virtual_environment_container" "debian_container" {
     }
 
     user_account {
-      password = "Yassine"
+      password = var.container_password
     }
   }
 

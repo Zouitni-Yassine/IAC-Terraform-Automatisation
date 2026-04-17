@@ -1,0 +1,5 @@
+proxmox_endpoint = "https://YOUR-PROXMOX-IP:8006/"
+proxmox_username = "root@pam"
+proxmox_password = "CHANGE_ME"
+proxmox_insecure = true
+container_password = "CHANGE_ME"
