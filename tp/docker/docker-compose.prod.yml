@@ -1,0 +1,46 @@
+services:
+  php:
+    build:
+      context: ./php
+    image: yassinezouitni/gestion-produits-php:prod
+    environment:
+      DB_TYPE: mysql
+      DB_HOST: db
+      DB_PORT: "3306"
+      DB_NAME: gestion_produits
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - php-uploads:/var/www/html/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gp-prod.rule=Host(`prod.gestion-produits.local`)"
+      - "traefik.http.routers.gp-prod.entrypoints=web"
+      - "traefik.http.services.gp-prod.loadbalancer.server.port=80"
+
+  db:
+    build:
+      context: ./mysql
+    image: yassinezouitni/gestion-produits-mysql:prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: gestion_produits
+      MYSQL_USER: ${DB_USER:-appuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  mysql-data:
+  php-uploads:

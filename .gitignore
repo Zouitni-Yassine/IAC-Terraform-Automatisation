@@ -31,3 +31,6 @@ terraform.rc
 
 # Claude Code session data
 .claude/
+# Environment files with secrets
+.env
+**/.env

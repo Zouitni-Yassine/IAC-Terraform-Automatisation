@@ -1,0 +1,114 @@
+# Full production stack: Traefik reverse proxy + prod (MySQL) + dev (PostgreSQL)
+# Run on the deployed VM. For local testing without RP, use docker-compose.prod.yml.
+
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: traefik
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--api.dashboard=true"
+      - "--api.insecure=true"
+    ports:
+      - "80:80"
+      # Dashboard bound to loopback only; reach it via SSH tunnel:
+      #   ssh -L 8080:localhost:8080 ubuntu@<VM_IP>
+      - "127.0.0.1:8080:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+
+  # ----- PROD (MySQL) -----
+  php-prod:
+    build:
+      context: ./php
+    image: yassinezouitni/gestion-produits-php:prod
+    environment:
+      DB_TYPE: mysql
+      DB_HOST: db-prod
+      DB_PORT: "3306"
+      DB_NAME: gestion_produits
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - php-prod-uploads:/var/www/html/uploads
+    depends_on:
+      db-prod:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gp-prod.rule=Host(`prod.gestion-produits.local`)"
+      - "traefik.http.routers.gp-prod.entrypoints=web"
+      - "traefik.http.services.gp-prod.loadbalancer.server.port=80"
+
+  db-prod:
+    build:
+      context: ./mysql
+    image: yassinezouitni/gestion-produits-mysql:prod
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-rootpass}
+      MYSQL_DATABASE: gestion_produits
+      MYSQL_USER: ${DB_USER:-appuser}
+      MYSQL_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - mysql-prod-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-p$$MYSQL_ROOT_PASSWORD"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # ----- DEV (PostgreSQL) -----
+  php-dev:
+    build:
+      context: ./php
+    image: yassinezouitni/gestion-produits-php:dev
+    environment:
+      DB_TYPE: pgsql
+      DB_HOST: db-dev
+      DB_PORT: "5432"
+      DB_NAME: gestion_produits
+      DB_USER: ${DB_USER:-appuser}
+      DB_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - php-dev-uploads:/var/www/html/uploads
+    depends_on:
+      db-dev:
+        condition: service_healthy
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.gp-dev.rule=Host(`dev.gestion-produits.local`)"
+      - "traefik.http.routers.gp-dev.entrypoints=web"
+      - "traefik.http.services.gp-dev.loadbalancer.server.port=80"
+
+  db-dev:
+    build:
+      context: ./postgres
+    image: yassinezouitni/gestion-produits-postgres:dev
+    environment:
+      POSTGRES_DB: gestion_produits
+      POSTGRES_USER: ${DB_USER:-appuser}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-apppass}
+    volumes:
+      - pg-dev-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+volumes:
+  mysql-prod-data:
+  pg-dev-data:
+  php-prod-uploads:
+  php-dev-uploads:
