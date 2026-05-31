@@ -1,0 +1,86 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: php-uploads
+  namespace: gp-prod
+spec:
+  accessModes: [ReadWriteOnce]
+  storageClassName: longhorn
+  resources:
+    requests:
+      storage: 2Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: php
+  namespace: gp-prod
+  labels:
+    app: php
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: php
+  template:
+    metadata:
+      labels:
+        app: php
+    spec:
+      containers:
+        - name: php
+          image: ghcr.io/zouitni-yassine/gestion-produits-php:tp
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 80
+              name: http
+          env:
+            - name: DB_TYPE
+              value: mysql
+            - name: DB_HOST
+              value: mysql.gp-prod.svc.cluster.local
+            - name: DB_PORT
+              value: "3306"
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: gp-prod-db
+                  key: MYSQL_DATABASE
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: gp-prod-db
+                  key: MYSQL_USER
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: gp-prod-db
+                  key: MYSQL_PASSWORD
+          volumeMounts:
+            - name: uploads
+              mountPath: /var/www/html/uploads
+          readinessProbe:
+            httpGet:
+              path: /index.php
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            requests: { cpu: "50m",  memory: "128Mi" }
+            limits:   { cpu: "500m", memory: "512Mi" }
+      volumes:
+        - name: uploads
+          persistentVolumeClaim:
+            claimName: php-uploads
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: php
+  namespace: gp-prod
+spec:
+  selector:
+    app: php
+  ports:
+    - port: 80
+      targetPort: 80

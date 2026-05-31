@@ -1,0 +1,21 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: gp-dev
+
+resources:
+  - namespace.yaml
+  # secret.yaml is intentionally excluded — credentials are generated and applied
+  # by scripts/gen-k8s-secrets.sh to avoid committing passwords.
+  - postgres-pvc.yaml
+  - postgres-deployment.yaml
+  - php-deployment.yaml
+  - ingress.yaml
+
+configMapGenerator:
+  - name: postgres-init
+    files:
+      - 01-gestion_produits.sql=../../docker/postgres/init/01-gestion_produits.sql
+
+generatorOptions:
+  disableNameSuffixHash: true
