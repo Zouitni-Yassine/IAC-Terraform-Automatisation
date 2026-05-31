@@ -9,14 +9,33 @@
 
 ## Objectif
 
-Déployer l'application `gestion-produits` (PHP + base de données) sur deux infrastructures distinctes, **toutes les deux provisionnées par Terraform** :
+Déployer l'application `gestion-produits` (PHP + base de données) sur deux infrastructures distinctes, **toutes les deux décrites en Terraform** :
 
 1. **Infra Docker** — 1 VM avec Traefik en reverse proxy frontal
-2. **Infra Kubernetes (k3s)** — cluster 3 nœuds avec Longhorn pour le stockage partagé
+2. **Infra Kubernetes (k3s)** — cluster 3 nœuds avec stockage partagé
 
-Et une **version dev** utilisant PostgreSQL (au lieu de MySQL) déployée sur les deux infras.
+Avec en plus une **version dev** utilisant PostgreSQL (au lieu de MySQL) déployée sur les deux infras.
 
-L'infrastructure cible est **Oracle Cloud Infrastructure (OCI) Always Free Tier** (4 vCPU ARM Ampere A1, 24 GB RAM, 200 GB stockage — gratuit à vie).
+---
+
+## Note importante sur la cible de déploiement
+
+Le TP autorise n'importe quelle infrastructure (Proxmox, hyperviseur, cloud public…) tant qu'elle est **automatisable** et **testable**.
+
+J'ai écrit deux variantes complètes du code Terraform :
+
+| Variante | Provider | But | Statut |
+|---|---|---|---|
+| **Cloud (OCI)** — [`terraform/docker-infra/`](terraform/docker-infra/), [`terraform/k8s-infra/`](terraform/k8s-infra/) | `oracle/oci` | Cible Oracle Cloud Always Free (4 vCPU ARM, 24 GB RAM, gratuit à vie) — c'était mon plan initial | ⚠️ Validé par `terraform plan`, mais `terraform apply` échoue avec `Out of host capacity` : Oracle a limité fortement la disponibilité des ARM A1 Free Tier depuis 2024, et la région `eu-paris-1` était saturée au moment du rendu. Problème connu et reproductible côté OCI, pas dans le code. |
+| **Local (Plan B reproductible)** — [`scripts/local-up.sh`](scripts/local-up.sh) | `kreuzwerker/docker` (Docker Compose) + **k3d** (cluster k3s in Docker) | Reproduit en local strictement la même architecture (Traefik + 1 host Docker, cluster k3s 3 nœuds) pour que le prof puisse tester via Cloudflare Tunnel | ✅ Validé bout en bout : login admin/password OK sur les 4 URLs |
+
+Les deux variantes utilisent **exactement les mêmes** :
+- images Docker (mêmes Dockerfile)
+- `docker-compose.yml` (avec Traefik et les labels d'Ingress)
+- manifests Kubernetes (kustomize prod + dev)
+- script de génération des Secrets aléatoires
+
+→ Le Plan B est isofonctionnel au déploiement cloud. Avec un compte OCI ayant accès à la capacité ARM, `terraform apply` sur les deux dossiers `terraform/*-infra/` provisionnerait l'infra publique sans modification du code applicatif.
 
 ---
 
@@ -34,26 +53,32 @@ L'infrastructure cible est **Oracle Cloud Infrastructure (OCI) Always Free Tier*
               ┌────────────────────┼────────────────────┐
               ▼                                         ▼
    ┌──────────────────────────┐         ┌────────────────────────────────┐
-   │  INFRA DOCKER (1 VM ARM) │         │  INFRA KUBERNETES (3 VMs ARM)  │
-   │  ──────────────────────  │         │  ─────────────────────────     │
-   │  Ubuntu 22.04            │         │  k3s v1.30.5                   │
-   │  Docker + Compose        │         │  + Traefik Ingress             │
-   │                          │         │  + Longhorn (storage)          │
-   │  ┌──────┐                │         │                                │
-   │  │Traefik│ :80           │         │  ┌─ namespace gp-prod ─┐       │
-   │  └──┬───┘                │         │  │ Deployment php × 2 │       │
-   │     ├──→ php-prod ──→ mysql        │  │ Deployment mysql   │       │
-   │     │   (prod.*)         │         │  │ PVC longhorn 5Gi   │       │
-   │     └──→ php-dev  ──→ postgres     │  │ Ingress prod-k8s.* │       │
-   │         (dev.*)          │         │  └────────────────────┘       │
-   │                          │         │                                │
-   │                          │         │  ┌─ namespace gp-dev ─┐        │
-   │                          │         │  │ Deployment php × 2 │       │
-   │                          │         │  │ Deployment postgres│       │
-   │                          │         │  │ PVC longhorn 5Gi   │       │
-   │                          │         │  │ Ingress dev-k8s.*  │       │
-   │                          │         │  └────────────────────┘       │
+   │  INFRA DOCKER             │         │  INFRA KUBERNETES              │
+   │  (Terraform OCI ou        │         │  (Terraform OCI ou k3d local)  │
+   │   docker compose local)   │         │                                │
+   │  ──────────────────────   │         │  k3s 3 nœuds                   │
+   │  Ubuntu/Linux + Docker    │         │  + Traefik Ingress (intégré)   │
+   │                           │         │  + Storage (Longhorn / k3d     │
+   │                           │         │    local-path)                 │
+   │  ┌──────┐                 │         │                                │
+   │  │Traefik│ :80            │         │  ┌─ namespace gp-prod ─┐       │
+   │  └──┬───┘                 │         │  │ Deployment php × 2 │       │
+   │     ├──→ php-prod ──→ mysql         │  │ Deployment mysql   │       │
+   │     │   (prod.*)          │         │  │ PVC 5Gi            │       │
+   │     └──→ php-dev  ──→ postgres      │  │ Ingress prod-k8s.* │       │
+   │         (dev.*)           │         │  └────────────────────┘       │
+   │                           │         │  ┌─ namespace gp-dev ─┐       │
+   │                           │         │  │ Deployment php × 2 │       │
+   │                           │         │  │ Deployment postgres│       │
+   │                           │         │  │ PVC 5Gi            │       │
+   │                           │         │  │ Ingress dev-k8s.*  │       │
+   │                           │         │  └────────────────────┘       │
    └──────────────────────────┘         └────────────────────────────────┘
+                       │                                  │
+                       │  Cloudflare Quick Tunnel         │
+                       └────────────┬─────────────────────┘
+                                    ▼
+                    https://*.trycloudflare.com (URLs publiques)
 ```
 
 ---
@@ -63,11 +88,10 @@ L'infrastructure cible est **Oracle Cloud Infrastructure (OCI) Always Free Tier*
 ```
 tp/
 ├── README.md                # Ce fichier
-├── CHECKLIST.md             # Suivi des tâches
-├── src-app/                 # Clone du dépôt original gestion-produits (read-only ref)
+├── CHECKLIST.md             # Suivi détaillé des tâches
 ├── docker/                  # Conteneurisation
-│   ├── docker-compose.yml         # Stack complète prod + dev (avec Traefik)
-│   ├── docker-compose.prod.yml    # Juste prod, pour test local
+│   ├── docker-compose.yml         # Stack complète prod + dev + Traefik
+│   ├── docker-compose.prod.yml    # Juste prod, pour test local rapide
 │   ├── .env.example
 │   ├── php/                 # Image PHP custom (PDO mysql + pgsql)
 │   │   ├── Dockerfile
@@ -79,49 +103,25 @@ tp/
 │       ├── Dockerfile
 │       └── init/01-gestion_produits.sql
 ├── terraform/
-│   ├── docker-infra/        # 1 VM OCI ARM avec Docker
-│   │   ├── provider.tf
-│   │   ├── main.tf          # VCN, IGW, route, security list, instance
-│   │   ├── variables.tf
-│   │   ├── outputs.tf
-│   │   ├── terraform.tfvars.example
-│   │   └── cloud-init/docker-vm.yaml
-│   └── k8s-infra/           # 3 VMs OCI ARM avec k3s
-│       ├── provider.tf
-│       ├── main.tf          # VCN, security list, 1 server + N agents
-│       ├── variables.tf
-│       ├── outputs.tf
-│       ├── terraform.tfvars.example
-│       └── cloud-init/
-│           ├── k3s-server.yaml   # cloud-init server (k3s + Longhorn)
-│           └── k3s-agent.yaml    # cloud-init agents
+│   ├── docker-infra/        # OCI : 1 VM ARM avec Docker
+│   └── k8s-infra/           # OCI : 3 VMs ARM avec k3s + Longhorn
 ├── kubernetes/
-│   ├── prod/                # MySQL backend
-│   │   ├── namespace.yaml
-│   │   ├── secret.yaml
-│   │   ├── mysql-pvc.yaml
-│   │   ├── mysql-deployment.yaml
-│   │   ├── php-deployment.yaml
-│   │   ├── ingress.yaml
-│   │   └── kustomization.yaml
-│   └── dev/                 # PostgreSQL backend
-│       ├── namespace.yaml
-│       ├── secret.yaml
-│       ├── postgres-pvc.yaml
-│       ├── postgres-deployment.yaml
-│       ├── php-deployment.yaml
-│       ├── ingress.yaml
-│       └── kustomization.yaml
+│   ├── prod/                # Manifests MySQL backend
+│   └── dev/                 # Manifests PostgreSQL backend
 └── scripts/
-    ├── build-and-push-php.sh    # Build + push de l'image PHP sur GHCR (multi-arch)
-    └── deploy-k8s.sh            # Apply prod + dev sur le cluster
+    ├── local-up.sh          # Déploiement local complet (Docker + k3d + K8s)
+    ├── local-down.sh        # Nettoyage local
+    ├── start-tunnels.sh     # Cloudflare Tunnel pour rendre les URLs publiques
+    ├── gen-k8s-secrets.sh   # Génération de Secrets aléatoires
+    ├── deploy-k8s.sh        # Apply des manifests K8s sur un cluster existant
+    └── build-and-push-php.sh # Build + push de l'image PHP sur GHCR
 ```
 
 ---
 
 ## Modifications apportées à l'application
 
-Le code original utilisait :
+Le code original avait :
 - **Credentials hardcodés** dans [`connect.php`](docker/php/www/connect.php) (host=`db`, user=`root`, password=`root`)
 - **`SHA2()`** côté SQL pour le hash du mot de passe dans [`auth.php`](docker/php/www/auth.php) — fonction spécifique à MySQL
 
@@ -129,210 +129,105 @@ Pour permettre le déploiement avec MySQL **et** PostgreSQL :
 
 | Fichier | Modification |
 |---|---|
-| `connect.php` | Lecture des credentials depuis variables d'env (`DB_TYPE`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). Le type de DSN PDO change selon `DB_TYPE` (mysql ou pgsql). |
-| `auth.php` | Hash SHA-256 calculé **en PHP** (`hash('sha256', $password)`) au lieu de `SHA2()` côté SQL. Identique en MySQL et PostgreSQL. |
+| `connect.php` | Lecture des credentials depuis variables d'env (`DB_TYPE`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). Le DSN PDO change selon `DB_TYPE` (mysql ou pgsql). |
+| `auth.php` | Hash SHA-256 calculé **en PHP** (`hash('sha256', $password)`) au lieu de `SHA2()` côté SQL. Identique en MySQL et PostgreSQL. `display_errors` retiré. |
 
 ---
 
 ## Prérequis
 
 - **Terraform** ≥ 1.5 (ou OpenTofu)
-- **Docker Desktop** sur le poste (pour build + test local + push images)
+- **Docker Desktop**
 - **kubectl** ≥ 1.28
-- **Compte Oracle Cloud Free Tier** : https://www.oracle.com/cloud/free/
-- **Compte GitHub** avec un Personal Access Token (write:packages) pour push sur GHCR
-- **SSH key** : `~/.ssh/id_ed25519` + `.pub`
+- **k3d** ≥ 5.0 — `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh | bash`
+- **cloudflared** (pour les tunnels publics) — `winget install Cloudflare.cloudflared` (Windows) / `brew install cloudflared` (macOS)
+- **SSH key** : `~/.ssh/id_ed25519` + `.pub` (pour la variante OCI)
 
 ---
 
-## 1. Conteneurisation de l'application
-
-### Test local (sans Terraform)
+## Quickstart — déploiement local (Plan B, testé ✅)
 
 ```bash
-cd tp/docker
-cp .env.example .env
-docker compose -f docker-compose.prod.yml up -d --build
-docker compose -f docker-compose.prod.yml ps
+# 1. Tout déployer (build images + k3d + manifests + secrets)
+bash tp/scripts/local-up.sh
+
+# 2. Tester depuis ton poste avec curl
+curl -H 'Host: prod.gestion-produits.local'    http://localhost/        # Docker prod (MySQL)
+curl -H 'Host: dev.gestion-produits.local'     http://localhost/        # Docker dev (PostgreSQL)
+curl -H 'Host: prod-k8s.gestion-produits.local' http://localhost:8081/  # K8s prod
+curl -H 'Host: dev-k8s.gestion-produits.local'  http://localhost:8081/  # K8s dev
+
+# 3. Pour le navigateur, ajouter dans %SystemRoot%\System32\drivers\etc\hosts :
+#    127.0.0.1 prod.gestion-produits.local dev.gestion-produits.local
+#    127.0.0.1 prod-k8s.gestion-produits.local dev-k8s.gestion-produits.local
+#    (les URLs K8s s'ouvrent avec :8081)
+
+# 4. Pour rendre les URLs accessibles à un testeur externe (prof)
+bash tp/scripts/start-tunnels.sh
+# Cloudflare affiche 2 URLs https://*.trycloudflare.com (une par port)
+
+# 5. Nettoyage à la fin
+bash tp/scripts/local-down.sh
 ```
 
-Pour tester l'app :
-```bash
-docker exec docker-php-1 curl -s -c /tmp/c -X POST \
-  -d "US_login=admin&US_password=password" http://localhost/auth.php -L
-docker exec docker-php-1 curl -s -b /tmp/c http://localhost/home.php | grep '<td>'
-```
-
-✅ Résultat attendu : login HTTP 302 → home.php affiche les 5 produits.
-
-### Build + push des images custom (GHCR)
-
-```bash
-export GHCR_USER=zouitni-yassine
-export GHCR_TOKEN=ghp_xxxxxxxxxxxxxxxxxxxxxxxxxx  # PAT avec write:packages
-bash tp/scripts/build-and-push-php.sh
-```
-
-Puis sur https://github.com/zouitni-yassine?tab=packages → **gestion-produits-php** → Package settings → **Change visibility → Public** (sinon K8s ne peut pas pull).
+**Login app** : `admin` / `password`
 
 ---
 
-## 2. Setup Oracle Cloud (compte + API key)
+## Quickstart — déploiement cloud (Plan A, à utiliser si OCI a de la capacité)
 
-### 2.1 Création du compte
+### A. Setup OCI (compte + API key)
 
-1. https://www.oracle.com/cloud/free/ → Start for free
-2. Email + CB (vérification uniquement, **aucun débit**)
-3. **Home region** : `eu-frankfurt-1` (recommandé en Europe)
-4. Attendre l'email d'activation (5-30 min)
+1. https://www.oracle.com/cloud/free/ → Start for free, CB pour vérification (aucun débit)
+2. Choisir le **home region**
+3. Générer une clé API localement et l'uploader dans **My profile → API keys** :
+   ```bash
+   mkdir -p ~/.oci
+   openssl genrsa -out ~/.oci/oci_api_key.pem 2048
+   chmod 600 ~/.oci/oci_api_key.pem
+   openssl rsa -pubout -in ~/.oci/oci_api_key.pem -out ~/.oci/oci_api_key_public.pem
+   ```
+4. Récupérer les OCID Tenancy + User + le Fingerprint
 
-### 2.2 Génération de la clé API
-
-Dans la console OCI, en haut à droite **profil → My profile → API keys → Add API key** :
-
-```bash
-# Générer une paire de clés localement
-mkdir -p ~/.oci
-openssl genrsa -out ~/.oci/oci_api_key.pem 2048
-chmod 600 ~/.oci/oci_api_key.pem
-openssl rsa -pubout -in ~/.oci/oci_api_key.pem -out ~/.oci/oci_api_key_public.pem
-```
-
-Coller le contenu de `oci_api_key_public.pem` dans la console OCI → on récupère le **fingerprint**.
-
-### 2.3 Collecter les OCID
-
-Console OCI → profil → **Tenancy** → OCID
-Console OCI → profil → **User Settings** → OCID
-
----
-
-## 3. Déploiement de l'infra Docker (Terraform OCI) — 7 pts
+### B. Déploiement Docker infra
 
 ```bash
 cd tp/terraform/docker-infra
 cp terraform.tfvars.example terraform.tfvars
-# Éditer terraform.tfvars avec tes OCID / fingerprint / chemin de clé
+# éditer terraform.tfvars
 terraform init
-terraform plan
 terraform apply
 ```
 
-Terraform crée :
-- Un **VCN** `10.10.0.0/16`
-- Un **Internet Gateway** + route table publique
-- Une **Security List** ouvrant 22, 80, 443, 8080 depuis Internet
-- Un **subnet public** `10.10.1.0/24`
-- Une **instance ARM Ampere A1 Flex** (1 OCPU, 6 GB RAM, 50 GB disque) avec Ubuntu 22.04
-- Un **cloud-init** qui installe Docker, clone ce dépôt, génère un `.env` aléatoire et lance `docker compose up -d`
+Provisionne : VCN `10.10.0.0/16` + IGW + route + Security List (22,80,443) + Subnet public + Instance `VM.Standard.A1.Flex` Ubuntu 22.04 ARM avec cloud-init qui installe Docker, clone le repo, et lance `docker compose up -d`.
 
-### Outputs
-
-```
-docker_vm_public_ip  = "X.X.X.X"
-ssh_command          = "ssh ubuntu@X.X.X.X"
-traefik_dashboard    = "http://X.X.X.X:8080"
-hosts_entries        = "X.X.X.X prod.gestion-produits.local dev.gestion-produits.local"
-```
-
-### Vérification
-
-```bash
-# Ajouter à C:\Windows\System32\drivers\etc\hosts (en admin)
-# OU /etc/hosts (Linux/Mac)
-X.X.X.X prod.gestion-produits.local dev.gestion-produits.local
-
-# Tester
-curl -I http://prod.gestion-produits.local/
-curl -I http://dev.gestion-produits.local/
-```
-
-Ouvrir dans le navigateur :
-- http://prod.gestion-produits.local → login `admin / password` → liste des produits (MySQL)
-- http://dev.gestion-produits.local → login `admin / password` → mêmes produits (PostgreSQL)
-- http://X.X.X.X:8080 → dashboard Traefik
-
----
-
-## 4. Déploiement de l'infra Kubernetes (Terraform OCI) — 13 pts
+### C. Déploiement K8s infra
 
 ```bash
 cd tp/terraform/k8s-infra
 cp terraform.tfvars.example terraform.tfvars
-# Mêmes OCID/credentials que pour docker-infra
 terraform init
-terraform plan
 terraform apply
 ```
 
-Terraform crée :
-- Un **VCN** `10.20.0.0/16` + IGW + route + security list (22, 80, 443, 6443, trafic interne libre)
-- **1 instance k3s-server** (1 OCPU, 6 GB RAM) avec cloud-init qui installe k3s server + Longhorn
-- **2 instances k3s-agent** (1 OCPU, 6 GB RAM chacune) qui rejoignent le cluster avec le même token (généré par `random_password`)
+Provisionne : VCN `10.20.0.0/16` + 1 instance k3s-server + 2 instances k3s-agent. Cloud-init installe k3s + Longhorn automatiquement. Le token de cluster est généré par `random_password` et partagé entre les nœuds.
 
-### Récupération du kubeconfig
-
+Récupération du kubeconfig :
 ```bash
-# La commande exacte est dans l'output Terraform
 ssh ubuntu@<IP_SERVER> sudo cat /etc/rancher/k3s/k3s.yaml \
   | sed "s|127.0.0.1|<IP_SERVER>|" > kubeconfig
 export KUBECONFIG=$PWD/kubeconfig
+```
 
-kubectl get nodes
-# Attendu : 3 nodes Ready (server + 2 agents)
-
-kubectl get pods -n longhorn-system
-# Attendu : pods longhorn-manager, csi-*, instance-manager-* Running
-
-kubectl get storageclass
-# Attendu : longhorn (default)
+Puis :
+```bash
+bash tp/scripts/build-and-push-php.sh    # publication image PHP sur GHCR
+bash tp/scripts/deploy-k8s.sh            # apply manifests prod + dev
 ```
 
 ---
 
-## 5. Déploiement de l'app sur Kubernetes — 7 pts (prod) + 4 pts (dev)
-
-```bash
-# (Si pas déjà fait) push de l'image PHP sur GHCR
-bash tp/scripts/build-and-push-php.sh
-
-# Apply prod + dev
-bash tp/scripts/deploy-k8s.sh
-```
-
-Le script utilise `kustomize` (intégré à kubectl) pour générer les ConfigMaps des init SQL à partir des fichiers locaux, puis applique :
-
-**Namespace `gp-prod`** :
-- Secret `gp-prod-db` (MYSQL_* env vars)
-- PVC `mysql-data` (5 Gi Longhorn)
-- Deployment `mysql` (1 replica, strategy Recreate)
-- Deployment `php` (2 replicas, image PHP custom)
-- PVC `php-uploads` (2 Gi Longhorn)
-- Service `mysql` + `php` (ClusterIP)
-- Ingress `gp-prod` → host `prod-k8s.gestion-produits.local`
-
-**Namespace `gp-dev`** :
-- Mêmes ressources avec PostgreSQL + Ingress sur `dev-k8s.gestion-produits.local`
-
-### Accès via le navigateur
-
-Récupérer l'IP publique du **k3s-server** (qui sert le Traefik Ingress) :
-```bash
-terraform -chdir=tp/terraform/k8s-infra output k3s_server_public_ip
-```
-
-Ajouter à `hosts` :
-```
-<IP_SERVER> prod-k8s.gestion-produits.local dev-k8s.gestion-produits.local
-```
-
-Tester :
-- http://prod-k8s.gestion-produits.local → app sur MySQL
-- http://dev-k8s.gestion-produits.local → app sur PostgreSQL
-
----
-
-## 6. Mise à jour de l'application
+## Mise à jour de l'application (4 pts)
 
 Le processus de MàJ est automatisé :
 
@@ -341,41 +236,28 @@ Le processus de MàJ est automatisé :
 # 2. Rebuild + push de l'image
 bash tp/scripts/build-and-push-php.sh
 
-# 3a. Rollout sur Docker (depuis la VM Docker, via SSH)
-ssh ubuntu@<IP_DOCKER_VM> "cd /opt/app/Terraform/tp/docker && git pull && docker compose pull && docker compose up -d"
+# 3a. Rollout sur Docker (VM Docker ou local)
+cd tp/docker && docker compose up -d --build
 
-# 3b. Rollout sur Kubernetes
+# 3b. Rollout sur Kubernetes (zero-downtime grâce aux 2 replicas + readinessProbe)
 kubectl -n gp-prod rollout restart deployment/php
 kubectl -n gp-dev  rollout restart deployment/php
 ```
 
-Avec K8s, le rollout est **zero-downtime** grâce aux 2 replicas et au `readinessProbe` qui attend que le pod soit OK avant de basculer le trafic.
+La version dev (PostgreSQL) est déjà déployée à côté de la prod (MySQL). Le passage de l'une à l'autre se fait par une simple variable d'env `DB_TYPE` (mysql/pgsql) lue par `connect.php`.
 
 ---
 
 ## URLs finales
 
-| Environnement | Infra | URL |
-|---|---|---|
-| Prod (MySQL) | Docker | http://prod.gestion-produits.local |
-| Dev (PostgreSQL) | Docker | http://dev.gestion-produits.local |
-| Prod (MySQL) | Kubernetes | http://prod-k8s.gestion-produits.local |
-| Dev (PostgreSQL) | Kubernetes | http://dev-k8s.gestion-produits.local |
+| Environnement | Infra | URL locale | URL publique (via Cloudflare Tunnel) |
+|---|---|---|---|
+| Prod (MySQL) | Docker | http://prod.gestion-produits.local/ | (généré par `start-tunnels.sh`) |
+| Dev (PostgreSQL) | Docker | http://dev.gestion-produits.local/ | (idem) |
+| Prod (MySQL) | Kubernetes | http://prod-k8s.gestion-produits.local:8081/ | (généré par `start-tunnels.sh`) |
+| Dev (PostgreSQL) | Kubernetes | http://dev-k8s.gestion-produits.local:8081/ | (idem) |
 
 **Credentials de l'app** : `admin` / `password`
-
----
-
-## Tests
-
-| Test | Statut |
-|---|---|
-| Build des images Docker | ✅ |
-| Lancement local du stack prod (MySQL) | ✅ — login admin/password OK, 5 produits visibles |
-| Validation docker-compose.yml (Traefik + prod + dev) | ✅ |
-| Validation des manifests K8s (kustomize build) | ⏳ déploiement en cours |
-| Déploiement Terraform Docker sur OCI | ⏳ en attente du compte OCI |
-| Déploiement Terraform K8s sur OCI | ⏳ en attente du compte OCI |
 
 ---
 

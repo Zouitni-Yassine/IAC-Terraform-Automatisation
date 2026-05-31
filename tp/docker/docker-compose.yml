@@ -6,8 +6,8 @@ services:
     image: traefik:v3.1
     container_name: traefik
     command:
-      - "--providers.docker=true"
-      - "--providers.docker.exposedbydefault=false"
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
       - "--entrypoints.web.address=:80"
       - "--api.dashboard=true"
       - "--api.insecure=true"
@@ -17,10 +17,8 @@ services:
       #   ssh -L 8080:localhost:8080 ubuntu@<VM_IP>
       - "127.0.0.1:8080:8080"
     volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik:/etc/traefik/dynamic:ro
     restart: unless-stopped
-    labels:
-      - "traefik.enable=true"
 
   # ----- PROD (MySQL) -----
   php-prod:

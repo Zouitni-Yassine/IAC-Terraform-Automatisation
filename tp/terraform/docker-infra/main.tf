@@ -112,7 +112,7 @@ resource "oci_core_instance" "docker_vm" {
 
   shape_config {
     ocpus         = 1
-    memory_in_gbs = 6
+    memory_in_gbs = 4
   }
 
   source_details {

@@ -1,0 +1,24 @@
+http:
+  routers:
+    gp-prod:
+      rule: "Host(`prod.gestion-produits.local`)"
+      service: gp-prod
+      entryPoints:
+        - web
+
+    gp-dev:
+      rule: "Host(`dev.gestion-produits.local`)"
+      service: gp-dev
+      entryPoints:
+        - web
+
+  services:
+    gp-prod:
+      loadBalancer:
+        servers:
+          - url: "http://php-prod:80"
+
+    gp-dev:
+      loadBalancer:
+        servers:
+          - url: "http://php-dev:80"
