@@ -37,7 +37,7 @@ variable "ssh_public_key" {
 variable "git_repo_url" {
   description = "Public Git repo URL containing the tp/ folder"
   type        = string
-  default     = "https://github.com/Zouitni-Yassine/Terraform.git"
+  default     = "https://github.com/Zouitni-Yassine/IAC-Terraform-Automatisation.git"
 }
 
 variable "availability_domain" {

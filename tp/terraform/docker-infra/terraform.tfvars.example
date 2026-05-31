@@ -7,4 +7,4 @@ compartment_ocid = "ocid1.tenancy.oc1..xxxxxxxxxxxxxxxxxxxxxx"
 
 ssh_public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBf7iojT3/ZJNwXwbekuahQvXtZnkx6CAEnimwJU2SUK yassi@yassinezouitni"
 
-git_repo_url = "https://github.com/Zouitni-Yassine/Terraform.git"
+git_repo_url = "https://github.com/Zouitni-Yassine/IAC-Terraform-Automatisation.git"
