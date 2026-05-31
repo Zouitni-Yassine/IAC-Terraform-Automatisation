@@ -54,7 +54,9 @@
   - [x] Génération `.env` aléatoire (openssl rand)
   - [x] `docker compose up -d` du stack complet (Traefik + prod + dev)
 - [x] `outputs.tf` (public_ip, ssh_command, traefik_dashboard, hosts_entries)
-- [ ] `terraform apply` réussi → en attente du compte OCI utilisateur
+- [x] `terraform plan` validé (auth OCI + réseau OK)
+- [ ] ⚠️ `terraform apply` impossible : OCI Free Tier eu-paris-1 = `Out of host capacity` (ARM A1 saturé chez Oracle)
+- [x] Repli local validé end-to-end ✅
 
 ## 3. Infra Kubernetes (Terraform OCI) — 13 pts
 
@@ -78,9 +80,11 @@
   - [x] Install k3s agent avec K3S_URL + K3S_TOKEN
   - [x] Attente que l'API server soit reachable avant install
 - [x] `outputs.tf` (server_public_ip, kubeconfig_fetch_command, hosts_entries)
-- [ ] `terraform apply` réussi → en attente du compte OCI utilisateur
-- [ ] `kubectl get nodes` montre 3 Ready
-- [ ] `kubectl get storageclass` montre `longhorn`
+- [x] `terraform plan` validé
+- [ ] ⚠️ `terraform apply` impossible : même problème de capacité ARM
+- [x] Repli : cluster k3d (1 server + 2 agents) en local, identique fonctionnellement à k3s, testé end-to-end ✅
+- [x] `kubectl get nodes` montre 3 Ready
+- [x] storageClass : `local-path` (équivalent fonctionnel de Longhorn sur 1 host Docker)
 
 ## 4. Déploiement de l'app sur Docker (prod + dev) — 6 pts
 
@@ -89,7 +93,9 @@
 - [x] PVC equivalent : volumes nommés Docker pour persistance MySQL/PostgreSQL/uploads
 - [x] Healthchecks (mysqladmin ping, pg_isready) → PHP attend que la BDD soit ready (`depends_on.condition: service_healthy`)
 - [x] `.env.example` versionné, `.env` généré aléatoirement par cloud-init
-- [ ] Déploiement effectif via Terraform apply → en attente OCI
+- [x] Déploiement effectif en local + URLs Cloudflare Tunnel testées ✅
+  - `https://satisfaction-blessed-span-pens.trycloudflare.com` (prod)
+  - `https://indicators-falls-ticket-magnet.trycloudflare.com` (dev)
 
 ## 5. Déploiement de l'app sur Kubernetes (prod) — 7 pts
 
@@ -100,8 +106,8 @@
 - [x] `kubernetes/prod/php-deployment.yaml` (PHP custom image GHCR, 2 replicas, PVC uploads, envFrom secret + DB_HOST = mysql.gp-prod.svc, readinessProbe HTTP)
 - [x] `kubernetes/prod/ingress.yaml` (ingressClassName traefik, host prod-k8s.gestion-produits.local)
 - [x] `kubernetes/prod/kustomization.yaml` (configMapGenerator pour SQL init depuis docker/mysql/init/)
-- [ ] `kubectl apply -k tp/kubernetes/prod` réussi
-- [ ] Accès navigateur OK
+- [x] `kubectl apply -k tp/kubernetes/prod` réussi sur k3d ✅
+- [x] Accès navigateur OK : `https://honor-railway-burlington-facilitate.trycloudflare.com`
 
 ## 6. Mise à jour de l'app (version dev avec PostgreSQL) — 4 pts
 
@@ -113,15 +119,17 @@
 - [x] Manifests K8s `kubernetes/dev/` (namespace gp-dev, secret POSTGRES_*, PVC, Deployment, Service, Ingress dev-k8s.*)
 - [x] `kubernetes/dev/kustomization.yaml`
 - [x] Process de MàJ documenté : `git pull` + `docker compose up -d` (Docker) ou `kubectl rollout restart` (K8s)
-- [ ] Déploiement effectif → en attente OCI
+- [x] Déploiement effectif sur Docker + K8s testés ✅
+  - Docker dev : `https://indicators-falls-ticket-magnet.trycloudflare.com`
+  - K8s dev : `https://conclude-lesson-enhancement-fog.trycloudflare.com`
 
 ## 7. Livrables
 
 - [x] Dépôt git propre avec terraform/, docker/, kubernetes/, scripts/
 - [x] `README.md` racine complet (architecture, instructions, URLs)
 - [x] `CHECKLIST.md` (ce fichier) montrant l'avancement
-- [ ] Push final sur GitHub
-- [ ] Envoi du dépôt à **anthony@avalone-fr.com**
+- [x] Push final sur GitHub : https://github.com/Zouitni-Yassine/IAC-Terraform-Automatisation
+- [ ] Envoi du dépôt à **anthony@avalone-fr.com** (à faire manuellement par Yassine, avec les 4 URLs publiques)
 
 ---
 

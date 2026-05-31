@@ -250,14 +250,16 @@ La version dev (PostgreSQL) est déjà déployée à côté de la prod (MySQL). 
 
 ## URLs finales
 
-| Environnement | Infra | URL locale | URL publique (via Cloudflare Tunnel) |
+| Environnement | Infra | URL locale | URL publique (Cloudflare Tunnel) |
 |---|---|---|---|
-| Prod (MySQL) | Docker | http://prod.gestion-produits.local/ | (généré par `start-tunnels.sh`) |
-| Dev (PostgreSQL) | Docker | http://dev.gestion-produits.local/ | (idem) |
-| Prod (MySQL) | Kubernetes | http://prod-k8s.gestion-produits.local:8081/ | (généré par `start-tunnels.sh`) |
-| Dev (PostgreSQL) | Kubernetes | http://dev-k8s.gestion-produits.local:8081/ | (idem) |
+| Prod (MySQL) | Docker | http://prod.gestion-produits.local/ | https://satisfaction-blessed-span-pens.trycloudflare.com |
+| Dev (PostgreSQL) | Docker | http://dev.gestion-produits.local/ | https://indicators-falls-ticket-magnet.trycloudflare.com |
+| Prod (MySQL) | Kubernetes | http://prod-k8s.gestion-produits.local:8081/ | https://honor-railway-burlington-facilitate.trycloudflare.com |
+| Dev (PostgreSQL) | Kubernetes | http://dev-k8s.gestion-produits.local:8081/ | https://conclude-lesson-enhancement-fog.trycloudflare.com |
 
 **Credentials de l'app** : `admin` / `password`
+
+> Les URLs publiques sont des tunnels Cloudflare Quick (anonymes, gratuits). Elles restent valides tant que le tunnel tourne sur mon poste (`bash scripts/start-tunnels.sh`). Si une URL ne répond plus, c'est que le tunnel a été coupé — me prévenir.
 
 ---
 
