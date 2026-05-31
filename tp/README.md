@@ -263,6 +263,16 @@ La version dev (PostgreSQL) est déjà déployée à côté de la prod (MySQL). 
 
 ---
 
+## Points spécifiques à noter pour la lecture du TP
+
+| Exigence du sujet | Comment c'est traité |
+|---|---|
+| URL sur ports par défaut (80/443) | Les 4 URLs publiques Cloudflare Tunnel sont en `https://...trycloudflare.com` → **port 443 par défaut**. En local, le stack Docker est sur :80 et le cluster k3d est sur :8081 (port libre, conflit physique avec :80 sur le même host) — invisible depuis l'extérieur via le tunnel. |
+| Stockage partagé K8s 3 nœuds | **Code Terraform OCI** : Longhorn v1.7.2 installé via cloud-init sur le k3s-server (`tp/terraform/k8s-infra/cloud-init/k3s-server.yaml`). **Repli local k3d** : `local-path` car les 3 nœuds k3d sont des conteneurs Docker sur le même host (filesystem partagé de fait). Le sed dans `local-up.sh` remplace `storageClassName: longhorn` → `local-path`. |
+| 2 replicas PHP K8s (HA) | Manifests = `replicas: 2`. Pour la démo, scaled à 1 (session PHP locale au pod, pas de Redis = pas de session-sharing). Voir `kubernetes/prod/php-deployment.yaml` ligne 23. En prod réelle on ajouterait un Redis pour les sessions. |
+| Automatisation max | Tout est piloté par 4 scripts shell : `local-up.sh` (déploie tout en 1 commande), `start-tunnels.sh` (publie via Cloudflare), `gen-k8s-secrets.sh` (mdp aléatoires), `local-down.sh` (nettoyage). Pour OCI : `terraform apply` une fois par dossier. |
+| Conteneurisation environnements multi | Image PHP unique (`yassinezouitni/gestion-produits-php`) déployée 4× avec env vars différentes — même artefact en prod et en dev, sur Docker et K8s. |
+
 ## Limitations / vulnérabilités connues (upstream)
 
 Le code source de l'application `gestion-produits` (fourni par le prof) contient
