@@ -1,0 +1,52 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - ufw
+  - open-iscsi
+  - nfs-common
+
+write_files:
+  - path: /opt/install-k3s-server.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      # OCI default rules block, allow what k3s needs at host level
+      iptables -I INPUT -p tcp --dport 6443 -j ACCEPT
+      iptables -I INPUT -p tcp --dport 80   -j ACCEPT
+      iptables -I INPUT -p tcp --dport 443  -j ACCEPT
+      iptables -I INPUT -s 10.20.0.0/16     -j ACCEPT
+      mkdir -p /etc/iptables
+      iptables-save > /etc/iptables/rules.v4 || true
+
+      # Longhorn prerequisites
+      systemctl enable --now iscsid
+
+      # Install k3s server (Traefik ingress is enabled by default in k3s)
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="v1.30.5+k3s1" \
+        K3S_TOKEN="${k3s_token}" \
+        sh -s - server \
+          --write-kubeconfig-mode 644 \
+          --tls-san $(curl -s http://169.254.169.254/opc/v2/instance/metadata/public_ip || echo "")
+
+      # Wait for cluster ready
+      until kubectl get nodes >/dev/null 2>&1; do sleep 2; done
+
+      # Make kubeconfig accessible to ubuntu user
+      mkdir -p /home/ubuntu/.kube
+      cp /etc/rancher/k3s/k3s.yaml /home/ubuntu/.kube/config
+      chown -R ubuntu:ubuntu /home/ubuntu/.kube
+
+      # Install Longhorn (waits for at least one node to be Ready)
+      until kubectl get nodes | grep -q " Ready"; do sleep 5; done
+      kubectl apply -f https://raw.githubusercontent.com/longhorn/longhorn/v1.7.2/deploy/longhorn.yaml
+
+runcmd:
+  - bash /opt/install-k3s-server.sh > /var/log/k3s-server-setup.log 2>&1
+
+final_message: "k3s server installed. kubeconfig at /etc/rancher/k3s/k3s.yaml"

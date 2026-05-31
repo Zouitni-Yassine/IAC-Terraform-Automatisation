@@ -1,0 +1,55 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+packages:
+  - ca-certificates
+  - curl
+  - git
+  - ufw
+
+write_files:
+  - path: /opt/setup-docker.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      # Install Docker (official convenience script)
+      curl -fsSL https://get.docker.com | sh
+      systemctl enable --now docker
+      usermod -aG docker ubuntu
+
+      # Open firewall (host UFW)
+      ufw allow 22/tcp
+      ufw allow 80/tcp
+      ufw allow 443/tcp
+      ufw allow 8080/tcp
+      ufw --force enable
+
+      # Clone repo and start the stack
+      mkdir -p /opt/app
+      cd /opt/app
+      if [ ! -d Terraform ]; then
+        git clone ${git_repo_url} Terraform
+      fi
+      cd /opt/app/Terraform/tp/docker
+
+      # Generate strong random secrets if no .env yet
+      if [ ! -f .env ]; then
+        ROOTPASS=$(openssl rand -hex 16)
+        APPPASS=$(openssl rand -hex 16)
+        cat > .env <<EOF
+      DB_ROOT_PASSWORD=$ROOTPASS
+      DB_USER=appuser
+      DB_PASSWORD=$APPPASS
+      EOF
+      fi
+
+      # Bring everything up (Traefik + prod app + dev app once defined)
+      docker compose -f docker-compose.yml up -d
+
+runcmd:
+  - bash /opt/setup-docker.sh > /var/log/tp-setup.log 2>&1
+
+final_message: "Docker host ready. See /var/log/tp-setup.log for setup output."

@@ -1,0 +1,38 @@
+#cloud-config
+package_update: true
+package_upgrade: false
+
+packages:
+  - curl
+  - open-iscsi
+  - nfs-common
+
+write_files:
+  - path: /opt/install-k3s-agent.sh
+    permissions: "0755"
+    content: |
+      #!/bin/bash
+      set -euo pipefail
+
+      iptables -I INPUT -s 10.20.0.0/16 -j ACCEPT
+      mkdir -p /etc/iptables
+      iptables-save > /etc/iptables/rules.v4 || true
+
+      systemctl enable --now iscsid
+
+      # Wait until the server's API is reachable
+      until curl -sk "https://${server_ip}:6443/" -o /dev/null; do
+        echo "waiting for k3s server..."
+        sleep 5
+      done
+
+      curl -sfL https://get.k3s.io | \
+        INSTALL_K3S_VERSION="v1.30.5+k3s1" \
+        K3S_URL="https://${server_ip}:6443" \
+        K3S_TOKEN="${k3s_token}" \
+        sh -
+
+runcmd:
+  - bash /opt/install-k3s-agent.sh > /var/log/k3s-agent-setup.log 2>&1
+
+final_message: "k3s agent installed and joined the cluster."
