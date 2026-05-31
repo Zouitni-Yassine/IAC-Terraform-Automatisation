@@ -22,12 +22,13 @@ Une **version dev** utilisant PostgreSQL (au lieu de MySQL) est également dépl
 
 Le sujet autorise n'importe quelle infrastructure (Proxmox, hyperviseur, cloud public…) tant qu'elle est automatisable et testable. Deux variantes Terraform sont fournies :
 
-| Variante | Provider | Description | Statut |
-|---|---|---|---|
-| **Cloud (OCI)** — [`terraform/docker-infra/`](terraform/docker-infra/), [`terraform/k8s-infra/`](terraform/k8s-infra/) | `oracle/oci` | Cible Oracle Cloud Always Free (4 vCPU ARM, 24 GB RAM). | `terraform plan` validé (authentification, réseau, droits OK). `terraform apply` retourne `Out of host capacity` : les **shapes gratuites des fournisseurs cloud sont en quantité très limitée** et fréquemment saturées — c'est le cas notamment du tier gratuit OCI ARM A1 en `eu-paris-1` au moment du rendu. La capacité gratuite n'est jamais garantie. Le code IaC reste correct : un compte payant ou une région avec stock disponible déploierait immédiatement. |
-| **Local reproductible** — [`scripts/local-up.sh`](scripts/local-up.sh) | `kreuzwerker/docker` (Docker Compose) + **k3d** (cluster k3s in Docker) | Reproduit la même architecture (Traefik + 1 host Docker, cluster k3s 3 nœuds) sur la machine de l'auteur. | Validé bout en bout : login `admin/password` OK sur les 4 URLs. |
+| Variante                                                                                                               | Provider                                                                | Description                                                                                               | Statut                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+| ---------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Cloud (OCI)** — [`terraform/docker-infra/`](terraform/docker-infra/), [`terraform/k8s-infra/`](terraform/k8s-infra/) | `oracle/oci`                                                            | Cible Oracle Cloud Always Free (4 vCPU ARM, 24 GB RAM).                                                   | `terraform plan` validé (authentification, réseau, droits OK). `terraform apply` retourne `Out of host capacity` : les **shapes gratuites des fournisseurs cloud sont en quantité très limitée** et fréquemment saturées — c'est le cas notamment du tier gratuit OCI ARM A1 en `eu-paris-1` au moment du rendu. La capacité gratuite n'est jamais garantie. Le code IaC reste correct : un compte payant ou une région avec stock disponible déploierait immédiatement. |
+| **Local reproductible** — [`scripts/local-up.sh`](scripts/local-up.sh)                                                 | `kreuzwerker/docker` (Docker Compose) + **k3d** (cluster k3s in Docker) | Reproduit la même architecture (Traefik + 1 host Docker, cluster k3s 3 nœuds) sur la machine de l'auteur. | Validé bout en bout : login `admin/password` OK sur les 4 URLs.                                                                                                                                                                                                                                                                                                                                                                                                          |
 
 Les deux variantes utilisent exactement les mêmes :
+
 - images Docker (mêmes Dockerfile)
 - `docker-compose.yml` (Traefik + labels d'Ingress)
 - manifests Kubernetes (kustomize prod + dev)
@@ -121,15 +122,16 @@ tp/
 ## Modifications apportées à l'application
 
 Le code source original contenait :
+
 - des credentials hardcodés dans [`connect.php`](docker/php/www/connect.php) (host=`db`, user=`root`, password=`root`) ;
 - un appel à `SHA2()` côté SQL dans [`auth.php`](docker/php/www/auth.php) — fonction spécifique à MySQL.
 
 Adaptations pour le double déploiement MySQL / PostgreSQL :
 
-| Fichier | Modification |
-|---|---|
+| Fichier       | Modification                                                                                                                                                                                                                                                                                            |
+| ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `connect.php` | Lecture des credentials depuis des variables d'environnement (`DB_TYPE`, `DB_HOST`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`). Le DSN PDO change selon `DB_TYPE` (`mysql` / `pgsql`). Une `PDOStatement` personnalisée remappe les noms de colonnes pour absorber la case-sensitivity PostgreSQL. |
-| `auth.php` | Hash SHA-256 calculé en PHP (`hash('sha256', $password)`) au lieu de `SHA2()` côté SQL. Identique en MySQL et PostgreSQL. `display_errors` retiré pour éviter les fuites d'erreur en production. |
+| `auth.php`    | Hash SHA-256 calculé en PHP (`hash('sha256', $password)`) au lieu de `SHA2()` côté SQL. Identique en MySQL et PostgreSQL. `display_errors` retiré pour éviter les fuites d'erreur en production.                                                                                                        |
 
 ---
 
@@ -163,14 +165,15 @@ Les mêmes étapes fonctionnent à l'identique pour les 4 URLs (Docker prod, Doc
 
 ### Étape 1 — Installer les prérequis
 
-| Outil | Commande d'installation |
-|---|---|
-| Docker Desktop | https://docs.docker.com/desktop/install/ |
-| kubectl | `winget install Kubernetes.kubectl` (Windows) / `brew install kubectl` (macOS) / `sudo snap install kubectl --classic` (Linux) |
-| k3d | `curl -L https://github.com/k3d-io/k3d/releases/latest/download/k3d-windows-amd64.exe -o k3d.exe` (Windows) ou `brew install k3d` (macOS) ou `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash` (Linux) |
-| cloudflared (optionnel — exposition publique) | `winget install Cloudflare.cloudflared` / `brew install cloudflared` / [Downloads](https://github.com/cloudflare/cloudflared/releases/latest) |
+| Outil                                         | Commande d'installation                                                                                                                                                                                                             |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Docker Desktop                                | https://docs.docker.com/desktop/install/                                                                                                                                                                                            |
+| kubectl                                       | `winget install Kubernetes.kubectl` (Windows) / `brew install kubectl` (macOS) / `sudo snap install kubectl --classic` (Linux)                                                                                                      |
+| k3d                                           | `curl -L https://github.com/k3d-io/k3d/releases/latest/download/k3d-windows-amd64.exe -o k3d.exe` (Windows) ou `brew install k3d` (macOS) ou `curl -s https://raw.githubusercontent.com/k3d-io/k3d/main/install.sh \| bash` (Linux) |
+| cloudflared (optionnel — exposition publique) | `winget install Cloudflare.cloudflared` / `brew install cloudflared` / [Downloads](https://github.com/cloudflare/cloudflared/releases/latest)                                                                                       |
 
 Vérifications :
+
 ```bash
 docker --version
 kubectl version --client
@@ -191,6 +194,7 @@ bash scripts/local-up.sh
 ```
 
 Ce script enchaîne automatiquement :
+
 1. `docker compose up -d --build` — construit les images PHP/MySQL/PostgreSQL et démarre le stack (Traefik + prod + dev)
 2. `k3d cluster create tp-k8s --servers 1 --agents 2 --port "8081:80@loadbalancer"` — crée un cluster Kubernetes 3 nœuds
 3. Récupère le `kubeconfig` et l'écrit dans `~/.kube/config-tp-k8s`
@@ -216,6 +220,7 @@ kubectl get pods -A
 ### Étape 5 — Accéder aux URLs locales
 
 Ajouter ces lignes au fichier `hosts` du poste :
+
 - Windows : `C:\Windows\System32\drivers\etc\hosts` (en administrateur)
 - macOS / Linux : `/etc/hosts` (avec sudo)
 
@@ -225,6 +230,7 @@ Ajouter ces lignes au fichier `hosts` du poste :
 ```
 
 Puis ouvrir dans un navigateur :
+
 - http://prod.gestion-produits.local/ — Docker prod (MySQL)
 - http://dev.gestion-produits.local/ — Docker dev (PostgreSQL)
 - http://prod-k8s.gestion-produits.local:8081/ — Kubernetes prod (MySQL)
@@ -233,6 +239,7 @@ Puis ouvrir dans un navigateur :
 Login : `admin` / `password`.
 
 Alternative en ligne de commande (sans modifier le fichier hosts) :
+
 ```bash
 curl -H 'Host: prod.gestion-produits.local'     http://localhost/
 curl -H 'Host: dev.gestion-produits.local'      http://localhost/
@@ -297,6 +304,7 @@ terraform apply
 Provisionne : VCN `10.20.0.0/16` + 1 instance k3s-server + 2 instances k3s-agent. Cloud-init installe k3s + Longhorn automatiquement. Le token de cluster est généré par `random_password` et partagé entre les nœuds via `templatefile`.
 
 Récupération du kubeconfig :
+
 ```bash
 ssh ubuntu@<IP_SERVER> sudo cat /etc/rancher/k3s/k3s.yaml \
   | sed "s|127.0.0.1|<IP_SERVER>|" > kubeconfig
@@ -304,6 +312,7 @@ export KUBECONFIG=$PWD/kubeconfig
 ```
 
 Déploiement de l'application :
+
 ```bash
 bash tp/scripts/build-and-push-php.sh    # publication de l'image PHP sur GHCR
 bash tp/scripts/deploy-k8s.sh            # apply des manifests prod + dev
@@ -334,12 +343,12 @@ La version dev (PostgreSQL) est déployée à côté de la prod (MySQL). Le pass
 
 ## URLs
 
-| Environnement | Infra | URL locale (hosts file) | URL publique |
-|---|---|---|---|
-| Prod (MySQL) | Docker | http://prod.gestion-produits.local/ | https://satisfaction-blessed-span-pens.trycloudflare.com |
-| Dev (PostgreSQL) | Docker | http://dev.gestion-produits.local/ | https://indicators-falls-ticket-magnet.trycloudflare.com |
-| Prod (MySQL) | Kubernetes | http://prod-k8s.gestion-produits.local:8081/ | https://honor-railway-burlington-facilitate.trycloudflare.com |
-| Dev (PostgreSQL) | Kubernetes | http://dev-k8s.gestion-produits.local:8081/ | https://conclude-lesson-enhancement-fog.trycloudflare.com |
+| Environnement    | Infra      | URL locale (hosts file)                      | URL publique                                                  |
+| ---------------- | ---------- | -------------------------------------------- | ------------------------------------------------------------- |
+| Prod (MySQL)     | Docker     | http://prod.gestion-produits.local/          | https://satisfaction-blessed-span-pens.trycloudflare.com      |
+| Dev (PostgreSQL) | Docker     | http://dev.gestion-produits.local/           | https://indicators-falls-ticket-magnet.trycloudflare.com      |
+| Prod (MySQL)     | Kubernetes | http://prod-k8s.gestion-produits.local:8081/ | https://honor-railway-burlington-facilitate.trycloudflare.com |
+| Dev (PostgreSQL) | Kubernetes | http://dev-k8s.gestion-produits.local:8081/  | https://conclude-lesson-enhancement-fog.trycloudflare.com     |
 
 Credentials de l'application : `admin` / `password`
 
@@ -349,13 +358,13 @@ Credentials de l'application : `admin` / `password`
 
 ## Points notables
 
-| Aspect | Implémentation |
-|---|---|
-| Ports par défaut (80/443) | Les URLs publiques sont en `https://...trycloudflare.com` → port 443 standard. Côté local, le stack Docker écoute sur :80 et le cluster k3d sur :8081 (le port :80 ne peut être bind qu'une fois sur le même host). |
-| Stockage partagé K8s | **Cloud OCI** : Longhorn v1.7.2 installé via cloud-init sur le k3s-server. **Local k3d** : `local-path` — les 3 nœuds k3d étant des conteneurs sur le même host Docker, le filesystem est partagé de fait. Le `local-up.sh` substitue `storageClassName: longhorn` → `local-path` à l'apply. |
-| Replicas PHP K8s | Manifest = `replicas: 2`. Scaled à 1 pour la démonstration (sessions PHP locales au pod, pas de backend Redis). Une stack production-ready inclurait un Redis pour le partage de session. |
-| Conteneurisation multi-environnement | Image PHP unique déployée quatre fois avec des variables d'environnement différentes — même artefact en prod et en dev, sur Docker et sur Kubernetes. |
-| Automatisation | Quatre scripts shell pilotent l'ensemble : `local-up.sh`, `start-tunnels.sh`, `gen-k8s-secrets.sh`, `local-down.sh`. Pour le cloud : `terraform apply` une fois par dossier. |
+| Aspect                               | Implémentation                                                                                                                                                                                                                                                                               |
+| ------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Ports par défaut (80/443)            | Les URLs publiques sont en `https://...trycloudflare.com` → port 443 standard. Côté local, le stack Docker écoute sur :80 et le cluster k3d sur :8081 (le port :80 ne peut être bind qu'une fois sur le même host).                                                                          |
+| Stockage partagé K8s                 | **Cloud OCI** : Longhorn v1.7.2 installé via cloud-init sur le k3s-server. **Local k3d** : `local-path` — les 3 nœuds k3d étant des conteneurs sur le même host Docker, le filesystem est partagé de fait. Le `local-up.sh` substitue `storageClassName: longhorn` → `local-path` à l'apply. |
+| Replicas PHP K8s                     | Manifest = `replicas: 2`. Scaled à 1 pour la démonstration (sessions PHP locales au pod, pas de backend Redis). Une stack production-ready inclurait un Redis pour le partage de session.                                                                                                    |
+| Conteneurisation multi-environnement | Image PHP unique déployée quatre fois avec des variables d'environnement différentes — même artefact en prod et en dev, sur Docker et sur Kubernetes.                                                                                                                                        |
+| Automatisation                       | Quatre scripts shell pilotent l'ensemble : `local-up.sh`, `start-tunnels.sh`, `gen-k8s-secrets.sh`, `local-down.sh`. Pour le cloud : `terraform apply` une fois par dossier.                                                                                                                 |
 
 ---
 
@@ -378,24 +387,24 @@ Corrections appliquées côté infrastructure et conteneurisation :
 
 ## Couverture des exigences du sujet
 
-| Exigence | Implémentation | Référence |
-|---|---|---|
-| Conteneurisation de l'application pour Docker | Image PHP custom (php:8.3-apache + pdo_mysql + pdo_pgsql), images MySQL et PostgreSQL avec init data, `docker-compose.yml` complet | [`docker/`](docker/) |
-| Déploiement infrastructure avec Terraform | Code Terraform complet pour les deux infras (provider OCI ARM Always Free) | [`terraform/docker-infra/`](terraform/docker-infra/), [`terraform/k8s-infra/`](terraform/k8s-infra/) |
-| Infrastructure Docker avec reverse proxy frontal | Traefik v3.1 en frontal avec file provider, routes vers prod et dev | [`docker/docker-compose.yml`](docker/docker-compose.yml), [`docker/traefik/dynamic.yml`](docker/traefik/dynamic.yml) |
-| Cluster Kubernetes 3 nœuds | k3s 1 server + 2 agents (Terraform OCI) / k3d 1 server + 2 agents (local) | [`terraform/k8s-infra/main.tf`](terraform/k8s-infra/main.tf), [`scripts/local-up.sh`](scripts/local-up.sh) |
-| Stockage partagé K8s | Longhorn v1.7.2 installé via cloud-init sur OCI ; local-path sur k3d (single-host) | [`terraform/k8s-infra/cloud-init/k3s-server.yaml`](terraform/k8s-infra/cloud-init/k3s-server.yaml) |
-| Déploiement de l'application sur Docker (prod) | Stack Docker Compose Traefik + PHP + MySQL avec healthchecks, volumes persistants | [`docker/docker-compose.yml`](docker/docker-compose.yml) |
-| Déploiement de l'application sur Kubernetes | Manifests Deployment + Service + Ingress + Secret + PVC pour prod et dev, gérés par kustomize | [`kubernetes/`](kubernetes/) |
-| Accès via URLs sur ports HTTP/HTTPS par défaut | Les URLs publiques sont en `https://*.trycloudflare.com` → port 443 standard | Tableau URLs ci-dessus |
-| Résolution de nom locale | Documentée (entrées `hosts` ou DNS local) | Section "Déploiement local" |
-| Mise à jour de l'application (version dev PostgreSQL) | Schéma SQL converti, Dockerfile PostgreSQL, manifests K8s dev, URL `dev.*` et `dev-k8s.*` distinctes, process de rollout documenté | [`docker/postgres/`](docker/postgres/), [`kubernetes/dev/`](kubernetes/dev/) |
-| Automatisation maximale | Scripts shell + Terraform : 1 commande déploie tout (`local-up.sh` ou `terraform apply`) | [`scripts/`](scripts/) |
-| Dépôt git avec descriptif Markdown + instructions | Ce dépôt avec ce README + CHECKLIST détaillée | [`README.md`](README.md), [`CHECKLIST.md`](CHECKLIST.md) |
+| Exigence                                              | Implémentation                                                                                                                     | Référence                                                                                                            |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Conteneurisation de l'application pour Docker         | Image PHP custom (php:8.3-apache + pdo_mysql + pdo_pgsql), images MySQL et PostgreSQL avec init data, `docker-compose.yml` complet | [`docker/`](docker/)                                                                                                 |
+| Déploiement infrastructure avec Terraform             | Code Terraform complet pour les deux infras (provider OCI ARM Always Free)                                                         | [`terraform/docker-infra/`](terraform/docker-infra/), [`terraform/k8s-infra/`](terraform/k8s-infra/)                 |
+| Infrastructure Docker avec reverse proxy frontal      | Traefik v3.1 en frontal avec file provider, routes vers prod et dev                                                                | [`docker/docker-compose.yml`](docker/docker-compose.yml), [`docker/traefik/dynamic.yml`](docker/traefik/dynamic.yml) |
+| Cluster Kubernetes 3 nœuds                            | k3s 1 server + 2 agents (Terraform OCI) / k3d 1 server + 2 agents (local)                                                          | [`terraform/k8s-infra/main.tf`](terraform/k8s-infra/main.tf), [`scripts/local-up.sh`](scripts/local-up.sh)           |
+| Stockage partagé K8s                                  | Longhorn v1.7.2 installé via cloud-init sur OCI ; local-path sur k3d (single-host)                                                 | [`terraform/k8s-infra/cloud-init/k3s-server.yaml`](terraform/k8s-infra/cloud-init/k3s-server.yaml)                   |
+| Déploiement de l'application sur Docker (prod)        | Stack Docker Compose Traefik + PHP + MySQL avec healthchecks, volumes persistants                                                  | [`docker/docker-compose.yml`](docker/docker-compose.yml)                                                             |
+| Déploiement de l'application sur Kubernetes           | Manifests Deployment + Service + Ingress + Secret + PVC pour prod et dev, gérés par kustomize                                      | [`kubernetes/`](kubernetes/)                                                                                         |
+| Accès via URLs sur ports HTTP/HTTPS par défaut        | Les URLs publiques sont en `https://*.trycloudflare.com` → port 443 standard                                                       | Tableau URLs ci-dessus                                                                                               |
+| Résolution de nom locale                              | Documentée (entrées `hosts` ou DNS local)                                                                                          | Section "Déploiement local"                                                                                          |
+| Mise à jour de l'application (version dev PostgreSQL) | Schéma SQL converti, Dockerfile PostgreSQL, manifests K8s dev, URL `dev.*` et `dev-k8s.*` distinctes, process de rollout documenté | [`docker/postgres/`](docker/postgres/), [`kubernetes/dev/`](kubernetes/dev/)                                         |
+| Automatisation maximale                               | Scripts shell + Terraform : 1 commande déploie tout (`local-up.sh` ou `terraform apply`)                                           | [`scripts/`](scripts/)                                                                                               |
+| Dépôt git avec descriptif Markdown + instructions     | Ce dépôt avec ce README + CHECKLIST détaillée                                                                                      | [`README.md`](README.md), [`CHECKLIST.md`](CHECKLIST.md)                                                             |
 
 ---
 
 ## Auteur
 
-Yassine Zouitni — yassine.zouitni@linctra.com
+Yassine Zouitni
 Dépôt : https://github.com/Zouitni-Yassine/IAC-Terraform-Automatisation
